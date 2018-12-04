@@ -1,0 +1,501 @@
+import cv2
+import numpy as np
+from matplotlib import pyplot as plt
+import imageio
+import os
+import imageio.core.util
+import glob
+
+def root_warning_handler(*args, **kwargs):
+    pass
+out_dir = 'cropped'
+id=1;
+dirs = ['train' , 'test']
+for dir in dirs:
+    if not os.path.exists(dir+ '_cropped'):
+        os.mkdir(dir+ '_cropped')
+    for file in glob.glob(dir+"\*.jpg"):
+        img = cv2.imread(file)
+        disp_save = cv2.imread(file)
+    
+    #img=cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+    #img = cv2.normalize(img, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+
+        img = cv2.resize(img, (250, 250)) 
+        disp_save = cv2.resize(img, (250, 250))
+    #plt.imshow(img)
+
+        img = cv2.bilateralFilter(img,10, 80, 80)
+        display=cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    #plt.imshow(display)
+
+        gray=cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        thresh, dst = cv2.threshold(gray,100,220,0)
+        im2, contours, hierarchy = cv2.findContours(dst,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+        disp=cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        #disp_save = disp.copy()
+
+        for p in contours:
+            x, y, w, h = cv2.boundingRect(p)
+            if w*h < 125:
+                continue
+            roi_save = disp_save[y:y+h, x:x+w]
+            cv2.imwrite(dir+ '_cropped\img'+str(id) + '.jpg', roi_save)   
+            print(str(id))
+            roi = cv2.rectangle(disp, (x, y), (x+w, y+h), (0, 255, 0), 2)
+       #plt.figure(id)
+       #plt.clf()
+       #plt.axis('off')
+            plt.imshow(disp)
+            id=id+1
+import pandas as pd
+df=pd.read_csv('train_ship_segmentations_v2.csv')
+
+
+xy=df[df.EncodedPixels.notnull()]
+
+from PIL import Image
+import os
+
+path1 = 'train_dataset'    
+path2 = 'positive_data_samples'
+if not os.path.exists(path2):
+    os.mkdir(path2)
+listing = os.listdir(path1)
+already = os.listdir(path2)    
+for file in listing:
+    im = Image.open(path1 + '/' + file)
+    if(any(xy.ImageId == file)):
+        if not os.path.exists(path2 + '/' + file):
+            print(file)
+            im.save(path2 + '/' + file)
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Nov 29 19:29:13 2018
+
+@author: malee
+"""
+from __future__ import print_function
+
+from sklearn import datasets
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import classification_report
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import accuracy_score
+
+
+from sklearn.ensemble import AdaBoostClassifier
+
+from xgboost import XGBClassifier
+import pandas as pd
+from sklearn import model_selection
+import numpy as np
+import pandas as pd
+from sklearn import preprocessing
+from sklearn.preprocessing import StandardScaler
+import warnings
+from sklearn.externals import joblib
+from sklearn.metrics import roc_curve
+from sklearn.metrics import roc_auc_score
+from matplotlib import pyplot
+
+
+
+print(__doc__)
+
+# Loading the Digits dataset
+def evaluate_classifier(estimator_name, model, tuned_parameters, X_train, X_test, y_train, y_test):
+
+     scores = ['accuracy']
+
+     for score in scores:
+         print("# Tuning hyper-parameters for %s" % score)
+         print()
+
+     clf = GridSearchCV(estimator_name(), tuned_parameters, cv=5,
+                       scoring='%s' % score)
+     clf.fit(X_train, y_train)
+     joblib.dump(clf.best_estimator_, str(model)+'.pkl')
+     
+
+     print("Best parameters set found on development set:")
+     print()
+     print(clf.best_params_)
+     print()
+     print("Grid scores on development set:")
+     print()
+     means = clf.cv_results_['mean_test_score']
+     stds = clf.cv_results_['std_test_score']
+     for mean, std, params in zip(means, stds, clf.cv_results_['params']):
+         print("%0.3f (+/-%0.03f) for %r"
+              % (mean, std * 2, params))
+     print()
+     print("Detailed classification report for " + str(estimator_name) +":")
+     print()
+     print("The model is trained on the full development set.")
+     print("The scores are computed on the full evaluation set.")
+     print()
+     y_true, y_pred = y_test, clf.predict(X_test)
+     print(classification_report(y_true, y_pred))
+     print("Detailed confusion matrix:")
+     print(confusion_matrix(y_true, y_pred))
+     print("Accuracy Score: \n")
+     print(accuracy_score(y_true, y_pred))
+      # predict probabilities
+     probabilities = clf.predict_proba(X_test)
+     # keep probabilities for the positive outcome only
+     probabilities = probabilities[:, 1]
+     # calculate Area under curve
+     auc = roc_auc_score(y_test, probabilities)
+     print('Area Under Curve: %.3f' % auc)
+     # calculate roc curve
+     fpr, tpr, thresholds = roc_curve(y_test, probabilities)
+     # plot no skill
+     pyplot.plot([0, 1], [0, 1], linestyle='--')
+     # plot the roc curve for the model
+     pyplot.plot(fpr, tpr, marker='.')
+     # show the plot
+     pyplot.show()
+
+     print()
+     print("*************************************************************************")
+    
+if __name__ == "__main__":
+    df=pd.read_csv('train_data.csv')
+    df_test = pd.read_csv('test_data.csv')
+df
+X_train = df.iloc[:,:2915].values
+y_train = df.iloc[:, 2916].values
+X_test = df_test.iloc[:,:2915].values
+y_test = df_test.iloc[:, 2916].values
+
+estimator_name = [AdaBoostClassifier, XGBClassifier]
+model_name = ["AdaBoost Classifier","XGBoost"]
+parameters = [
+                             [
+                                    {#AdaBoost Classifier
+                                           'n_estimators':[100,200,350],
+                                           'learning_rate':[0.2,0.1,0.09],
+                                           'algorithm':['SAMME.R','SAMME'],
+                                    }
+                               ],
+                            
+                               [
+                                    {#XGBoost
+                                           'learning_rate':[0.1, 0.09, 0.5],
+                                           'n_estimators':[100, 200, 300],
+                                           'booster':['gbtree','gblinear']
+                                    }
+                               ]
+    
+                        ]
+warnings.simplefilter("ignore")
+i=0
+for est in estimator_name:
+    print("Evaluating Best Parameters and Accuracy for " + model_name[i])
+    evaluate_classifier(est, model_name[i], parameters[i], X_train, X_test, y_train, y_test)
+    i=i+1
+# Note the problem is too easy: the hyperparameter plateau is too flat and the
+# output model is the same for precision and recall with ties in quality.
+
+from __future__ import print_function
+
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import classification_report
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import accuracy_score
+from sklearn.svm import SVC
+from sklearn.neural_network import MLPClassifier
+from sklearn.ensemble import RandomForestClassifier
+import pandas as pd
+from sklearn import model_selection
+import numpy as np
+import pandas as pd
+from sklearn import preprocessing
+from sklearn.preprocessing import StandardScaler
+import warnings
+from sklearn.externals import joblib
+from sklearn.metrics import roc_curve
+from sklearn.metrics import roc_auc_score
+from matplotlib import pyplot
+
+
+
+print(__doc__)
+
+# Loading the Digits dataset
+def evaluate_classifier(estimator_name, model, tuned_parameters, X_train, X_test, y_train, y_test):
+
+     scores = ['accuracy']
+
+     for score in scores:
+         print("# Tuning hyper-parameters for %s" % score)
+         print()
+
+     clf = GridSearchCV(estimator_name(), tuned_parameters, cv=5,
+                       scoring='%s' % score)
+     clf.fit(X_train, y_train)
+     joblib.dump(clf.best_estimator_, str(model)+'.pkl')
+     
+
+     print("Best parameters set found on development set:")
+     print()
+     print(clf.best_params_)
+     print()
+     print("Grid scores on development set:")
+     print()
+     means = clf.cv_results_['mean_test_score']
+     stds = clf.cv_results_['std_test_score']
+     for mean, std, params in zip(means, stds, clf.cv_results_['params']):
+         print("%0.3f (+/-%0.03f) for %r"
+              % (mean, std * 2, params))
+     print()
+     print("Detailed classification report for " + str(estimator_name) +":")
+     print()
+     print("The model is trained on the full development set.")
+     print("The scores are computed on the full evaluation set.")
+     print()
+     y_true, y_pred = y_test, clf.predict(X_test)
+     print(classification_report(y_true, y_pred))
+     print("Detailed confusion matrix:")
+     print(confusion_matrix(y_true, y_pred))
+     print("Accuracy Score: \n")
+     print(accuracy_score(y_true, y_pred))
+     # predict probabilities
+     probabilities = clf.predict_proba(X_test)
+     # keep probabilities for the positive outcome only
+     probabilities = probabilities[:, 1]
+     # calculate Area under curve
+     auc = roc_auc_score(y_test, probabilities)
+     print('Area Under Curve: %.3f' % auc)
+     # calculate roc curve
+     fpr, tpr, thresholds = roc_curve(y_test, probabilities)
+     # plot no skill
+     pyplot.plot([0, 1], [0, 1], linestyle='--')
+     # plot the roc curve for the model
+     pyplot.plot(fpr, tpr, marker='.')
+     # show the plot
+     pyplot.show()
+     print()
+     print("*************************************************************************")
+    
+if __name__ == "__main__":
+    df=pd.read_csv('train_data.csv')
+    df_test = pd.read_csv('test_data.csv')
+df
+X_train = df.iloc[:,:2915].values
+y_train = df.iloc[:, 2916].values
+X_test = df_test.iloc[:,:2915].values
+y_test = df_test.iloc[:, 2916].values
+
+estimator_name = [MLPClassifier,SVC]
+model_name = ["NeuralNetwork","SupportVectorMachine"]
+parameters = [
+                [
+                                   {#Neural Net
+                                             'hidden_layer_sizes':[(5,10,15), (7,15), (10,20), (15,30)],
+                                             'activation':['logistic', 'relu'],
+                                             'solver':['lbfgs'],
+                                             'alpha':[0.001,0.5],
+                                             'learning_rate':["constant", "adaptive"],
+                                             'max_iter': [100,200,500]
+                                    }
+                               ],
+                              
+                               [
+                                    {#Support Vector Machine
+                                            'kernel': ['rbf', 'sigmoid'], 
+                                            'C': [1, 10],
+                                            'max_iter':[100,  500, 1000],
+                                            'probability':[True]
+                                    }
+                               ],
+                        ]
+warnings.simplefilter("ignore")
+i=0
+for est in estimator_name:
+    print("Evaluating Best Parameters and Accuracy for " + model_name[i])
+    evaluate_classifier(est, model_name[i], parameters[i], X_train, X_test, y_train, y_test)
+    i=i+1
+# Note the problem is too easy: the hyperparameter plateau is too flat and the
+# output model is the same for precision and recall with ties in quality.
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Nov 23 01:56:49 2018
+
+@author: Shruti
+"""
+
+import cv2
+import numpy as np
+from matplotlib import pyplot as plt
+import imageio
+import os
+import imageio.core.util
+import glob
+
+def findHog(data, img, class_label):
+    img = cv2.resize(img, (24, 24))
+    #plt.imshow(img)
+    winSize = (16,16)
+    blockSize = (8,8)
+    blockStride = (4,4)
+    cellSize = (4,4)
+    nbins = 9
+    
+    hog = cv2.HOGDescriptor(winSize,blockSize,blockStride,cellSize,nbins)
+    
+    winStride = (4,4)
+    hist = hog.compute(img, winStride)
+    i=0
+
+#There are no headers in the file. First 2916 columns are feature values while 
+#the last column contains the class label
+
+    
+    while i < hist.size:
+        for a in hist[i]:
+            data.write(str(a))
+            data.write(',')
+            i=i+1
+    if class_label == 0:
+        data.write('0')  #label for positive sample
+    elif class_label == 1:
+        data.write('1')
+            
+
+with open('train_data.csv','w') as train_data:
+    id=0
+    for file in glob.glob('train_pos\*.jpg'):
+        img = cv2.imread(file)
+        findHog(train_data, img, 0)
+        train_data.write('\n')
+        id = id+1
+    print("Total pos images " + str(id))
+    id=0
+    for file in glob.glob('train_neg\*.jpg'):
+        img = cv2.imread(file)
+        findHog(train_data, img, 1)
+        train_data.write('\n')
+        id = id+1
+    print("Total neg images " + str(id))
+    
+with open('test_data.csv','w') as test_data:
+    id=0
+    for file in glob.glob('test_pos\*.jpg'):
+        img = cv2.imread(file)
+        findHog(test_data, img, 0)
+        test_data.write('\n')
+        id = id+1
+    print("Total pos images " + str(id))
+    id=0
+    for file in glob.glob('test_neg\*.jpg'):
+        img = cv2.imread(file)
+        findHog(test_data, img, 1)
+        test_data.write('\n')
+        id = id+1
+    print("Total neg images " + str(id))
+
+# -*- coding: utf-8 -*-
+"""
+Created on Sat Dec  1 22:39:09 2018
+
+@author: malee
+"""
+
+import cv2
+import numpy as np
+from matplotlib import pyplot as plt
+import glob
+from xgboost import XGBClassifier 
+import xgboost as xgb
+from sklearn.externals import joblib
+import pandas as pd
+import warnings
+warnings.filterwarnings("ignore")
+from IPython.display import display
+
+
+model = joblib.load('XGBoost.pkl')
+winSize = (16,16)
+blockSize = (8,8)
+blockStride = (4,4)
+cellSize = (4,4)
+nbins = 9
+hog = cv2.HOGDescriptor(winSize,blockSize,blockStride,cellSize,nbins)
+winStride = (4,4)
+image_num=0 
+for file in glob.glob("demo\*.jpg"):
+    image_num= image_num+1
+    img = cv2.imread(file)
+    disp_save = cv2.imread(file)
+    img = cv2.resize(img, (250, 250)) 
+    disp_save = cv2.resize(img, (250, 250))
+    img = cv2.bilateralFilter(img,10, 80, 80)
+    gray=cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    thresh, dst = cv2.threshold(gray,100,220,0)
+    im2, contours, hierarchy = cv2.findContours(dst,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+    disp=cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    
+    list_a = []
+    height = []
+    width = []
+    x_coord = []
+    y_coord = []
+    for p in contours:
+        x, y, w, h = cv2.boundingRect(p)
+        if w*h < 125:
+            continue
+        roi_to_predict = disp_save[y:y+h, x:x+w]
+        height.append(h)
+        width.append(w)
+        x_coord.append(x)
+        y_coord.append(y)
+        #print(roi_to_predict)
+        roi_to_predict = cv2.resize(roi_to_predict, (24, 24))
+        hist = hog.compute(roi_to_predict, winStride)
+        features = []
+        i=0
+        vals = ""
+        while i < hist.size:
+            for a in hist[i]:
+                vals = vals+str(a)
+                if (i <hist.size-1):
+                    vals = vals + ','
+            i=i+1
+        list_a.append(vals) 
+        #roi = cv2.rectangle(disp, (x, y), (x+w, y+h), (0, 255, 0), 2)    
+                       
+    s = 0
+    length = len(list_a)
+    with open('predict.csv','w') as file:
+        for a in list_a:
+            if s < length-1:
+                a = a+ "\n"
+            file.write(str(a))
+        s = s + 1			
+    df_test = pd.read_csv('predict.csv', header=None)
+    #print(df_test)
+    #print(df_test.size)
+    X_test = df_test.iloc[:, :2915].values
+    #print(X_test.size)
+    prediction = model.predict(X_test)
+    #print(prediction)
+    
+    i=0
+    display("The coordinates of detected rois of image " + str(image_num) + " are :")
+
+    for x in x_coord:
+        #print(r)
+        if(prediction[i] == 0):
+            cv2.rectangle(disp, (x, y_coord[i]), (x+width[i], y_coord[i]+height[i]), (0, 255, 0), 2)
+            display("("+str(x)+","+str(y_coord[i])+")")
+        else :
+            cv2.rectangle(disp, (x, y_coord[i]), (x+width[i], y_coord[i]+height[i]), (255, 0, 0), 2)  
+        i=i+1
+    plt.figure(image_num)
+    plt.clf()
+    plt.axis('off')    
+    plt.imshow(disp)
